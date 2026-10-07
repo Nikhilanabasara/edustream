@@ -3,11 +3,12 @@ import {
   BookOpen, Calendar, PlayCircle, Users, Plus, Edit2, Trash2, X,
   Lock, Unlock, Eye, EyeOff, ChevronRight, ArrowLeft, Save, Loader2,
   CreditCard, CheckCircle2, XCircle, Clock, ExternalLink, Upload,
+  Settings, KeyRound,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { Grade, Month, Video, Profile, StudentAccess, PaymentRequest } from '@/types';
 
-type Tab = 'overview' | 'grades' | 'months' | 'videos' | 'access' | 'payments';
+type Tab = 'overview' | 'grades' | 'months' | 'videos' | 'access' | 'payments' | 'settings';
 type EditState =
   | { type: 'grade'; data: Grade | null }
   | { type: 'month'; data: Month | null; gradeId: string }
@@ -208,6 +209,7 @@ export default function AdminDashboard() {
     { key: 'videos', label: 'Videos', icon: PlayCircle },
     { key: 'access', label: 'Student Access', icon: Users },
     { key: 'payments', label: 'Payments', icon: CreditCard },
+    { key: 'settings', label: 'Settings', icon: Settings },
   ];
 
   if (loading) {
@@ -594,6 +596,11 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Settings — admin password change */}
+      {tab === 'settings' && (
+        <SettingsTab />
+      )}
+
       {/* Slip preview modal */}
       {slipPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={() => setSlipPreview(null)}>
@@ -619,6 +626,138 @@ export default function AdminDashboard() {
           setEditing(null);
         }} />
       )}
+    </div>
+  );
+}
+
+function SettingsTab() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPasswords, setShowPasswords] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [success, setSuccess] = useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError('');
+    setSuccess(false);
+
+    if (newPassword.length < 6) {
+      setError('New password must be at least 6 characters.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New password and confirmation do not match.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: (await supabase.auth.getUser()).data.user?.email || '',
+        password: currentPassword,
+      });
+      if (signInError) throw new Error('Your current password is incorrect.');
+
+      const { error: updateError } = await supabase.auth.updateUser({ password: newPassword });
+      if (updateError) throw updateError;
+
+      setSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not change password. Please try again.';
+      setError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="animate-fade-in max-w-lg">
+      <div className="flex items-center gap-3 mb-6">
+        <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-primary-500 to-primary-700 flex items-center justify-center text-white">
+          <KeyRound className="w-5 h-5" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold">Change Password</h2>
+          <p className="text-sm text-muted">Update your admin account password</p>
+        </div>
+      </div>
+
+      <form onSubmit={handleSubmit} className="bg-surface rounded-2xl border border-app p-6 space-y-5">
+        {success && (
+          <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-success-50 dark:bg-success-900/20 border border-success-200 dark:border-success-800 text-success-700 dark:text-success-400 text-sm">
+            <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+            <span>Password updated successfully.</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="px-4 py-3 rounded-xl bg-error-50 dark:bg-error-900/20 border border-error-100 dark:border-error-800 text-error-700 dark:text-error-400 text-sm">
+            {error}
+          </div>
+        )}
+
+        <div>
+          <label className="block text-sm font-medium text-muted mb-2">Current Password</label>
+          <div className="relative">
+            <input
+              type={showPasswords ? 'text' : 'password'}
+              required
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              className={`${inputClass} pr-12`}
+              placeholder="Enter current password"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPasswords((s) => !s)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted hover:text-app transition-colors"
+            >
+              {showPasswords ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+            </button>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-muted mb-2">New Password</label>
+          <input
+            type={showPasswords ? 'text' : 'password'}
+            required
+            minLength={6}
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            className={inputClass}
+            placeholder="At least 6 characters"
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-muted mb-2">Confirm New Password</label>
+          <input
+            type={showPasswords ? 'text' : 'password'}
+            required
+            minLength={6}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            className={inputClass}
+            placeholder="Re-enter new password"
+          />
+        </div>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-3 rounded-xl bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold transition-colors flex items-center justify-center gap-2"
+        >
+          {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <KeyRound className="w-5 h-5" />}
+          {loading ? 'Updating...' : 'Update Password'}
+        </button>
+      </form>
     </div>
   );
 }
