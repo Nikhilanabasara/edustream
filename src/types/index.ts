@@ -51,6 +51,16 @@ export interface StudentAccess {
   created_at: string;
 }
 
+export interface Notice {
+  id: string;
+  title: string;
+  body: string;
+  is_active: boolean;
+  pinned: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type PaymentStatus = 'pending' | 'approved' | 'rejected';
 
 export interface PaymentRequest {

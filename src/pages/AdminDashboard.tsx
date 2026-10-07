@@ -3,12 +3,12 @@ import {
   BookOpen, Calendar, PlayCircle, Users, Plus, Edit2, Trash2, X,
   Lock, Unlock, Eye, EyeOff, ChevronRight, ArrowLeft, Save, Loader2,
   CreditCard, CheckCircle2, XCircle, Clock, ExternalLink, Upload,
-  Settings, KeyRound,
+  Settings, KeyRound, Megaphone, Pin, PinOff,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import type { Grade, Month, Video, Profile, StudentAccess, PaymentRequest } from '@/types';
+import type { Grade, Month, Video, Profile, StudentAccess, PaymentRequest, Notice } from '@/types';
 
-type Tab = 'overview' | 'grades' | 'months' | 'videos' | 'access' | 'payments' | 'settings';
+type Tab = 'overview' | 'grades' | 'months' | 'videos' | 'access' | 'payments' | 'notices' | 'settings';
 type EditState =
   | { type: 'grade'; data: Grade | null }
   | { type: 'month'; data: Month | null; gradeId: string }
@@ -36,6 +36,7 @@ export default function AdminDashboard() {
       await loadGrades();
       loadStudents();
       loadPayments();
+      loadNotices();
     })();
   }, []);
 
@@ -196,6 +197,17 @@ export default function AdminDashboard() {
     loadMonths();
   }
 
+  const [notices, setNotices] = useState<Notice[]>([]);
+
+  async function loadNotices() {
+    const { data } = await supabase
+      .from('notices')
+      .select('*')
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+    setNotices((data as Notice[]) || []);
+  }
+
   async function deleteVideo(video: Video) {
     if (!confirm(`Delete "${video.title}"?`)) return;
     await supabase.from('videos').delete().eq('id', video.id);
@@ -209,6 +221,7 @@ export default function AdminDashboard() {
     { key: 'videos', label: 'Videos', icon: PlayCircle },
     { key: 'access', label: 'Student Access', icon: Users },
     { key: 'payments', label: 'Payments', icon: CreditCard },
+    { key: 'notices', label: 'Notices', icon: Megaphone },
     { key: 'settings', label: 'Settings', icon: Settings },
   ];
 
@@ -596,6 +609,11 @@ export default function AdminDashboard() {
         </div>
       )}
 
+      {/* Notices management */}
+      {tab === 'notices' && (
+        <NoticesTab notices={notices} onReload={loadNotices} />
+      )}
+
       {/* Settings — admin password change */}
       {tab === 'settings' && (
         <SettingsTab />
@@ -627,6 +645,196 @@ export default function AdminDashboard() {
         }} />
       )}
     </div>
+  );
+}
+
+function NoticesTab({ notices, onReload }: { notices: Notice[]; onReload: () => void }) {
+  const [editing, setEditing] = useState<Notice | null>(null);
+  const [showForm, setShowForm] = useState(false);
+
+  async function toggleActive(notice: Notice) {
+    await supabase.from('notices').update({ is_active: !notice.is_active }).eq('id', notice.id);
+    onReload();
+  }
+
+  async function togglePin(notice: Notice) {
+    await supabase.from('notices').update({ pinned: !notice.pinned }).eq('id', notice.id);
+    onReload();
+  }
+
+  async function deleteNotice(notice: Notice) {
+    if (!confirm(`Delete "${notice.title}"?`)) return;
+    await supabase.from('notices').delete().eq('id', notice.id);
+    onReload();
+  }
+
+  return (
+    <div className="animate-fade-in">
+      <div className="flex justify-between items-center mb-5">
+        <div>
+          <h2 className="text-xl font-bold">Notices</h2>
+          <p className="text-sm text-muted">Post announcements visible to all students</p>
+        </div>
+        <button
+          onClick={() => { setEditing(null); setShowForm(true); }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-primary-600 hover:bg-primary-700 text-white font-medium text-sm transition-colors"
+        >
+          <Plus className="w-4 h-4" /> Add Notice
+        </button>
+      </div>
+
+      {notices.length === 0 ? (
+        <EmptyState text="No notices yet. Add one to announce something to students." />
+      ) : (
+        <div className="space-y-4">
+          {notices.map((notice) => (
+            <div key={notice.id} className={`bg-surface rounded-2xl p-5 border-2 group ${notice.pinned ? 'border-primary-300 dark:border-primary-800' : 'border-app'}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+                    {notice.pinned && (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full font-medium bg-primary-100 dark:bg-primary-900/30 text-primary-700 dark:text-primary-400">
+                        <Pin className="w-3 h-3" /> Pinned
+                      </span>
+                    )}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                      notice.is_active
+                        ? 'bg-success-100 dark:bg-success-900/30 text-success-700 dark:text-success-400'
+                        : 'bg-app text-muted'
+                    }`}>
+                      {notice.is_active ? 'Active' : 'Hidden'}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-lg mb-1">{notice.title}</h3>
+                  <p className="text-sm text-muted whitespace-pre-wrap line-clamp-3">{notice.body}</p>
+                  <p className="text-xs text-muted mt-2">{new Date(notice.created_at).toLocaleDateString()}</p>
+                </div>
+                <div className="flex gap-1 flex-shrink-0">
+                  <button
+                    onClick={() => togglePin(notice)}
+                    className={`p-2 rounded-lg transition-colors ${notice.pinned ? 'text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/20' : 'text-muted hover:text-app hover:bg-app'}`}
+                    title={notice.pinned ? 'Unpin' : 'Pin to top'}
+                  >
+                    {notice.pinned ? <PinOff className="w-4 h-4" /> : <Pin className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => toggleActive(notice)}
+                    className={`p-2 rounded-lg transition-colors ${notice.is_active ? 'text-success-600 hover:bg-success-50 dark:hover:bg-success-900/20' : 'text-muted hover:text-app hover:bg-app'}`}
+                    title={notice.is_active ? 'Hide from students' : 'Show to students'}
+                  >
+                    {notice.is_active ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                  <button
+                    onClick={() => { setEditing(notice); setShowForm(true); }}
+                    className="p-2 rounded-lg hover:bg-app text-muted hover:text-app"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => deleteNotice(notice)}
+                    className="p-2 rounded-lg hover:bg-error-50 dark:hover:bg-error-900/20 text-muted hover:text-error-600"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showForm && (
+        <NoticeForm
+          notice={editing}
+          onClose={() => { setShowForm(false); setEditing(null); }}
+          onSaved={() => { setShowForm(false); setEditing(null); onReload(); }}
+        />
+      )}
+    </div>
+  );
+}
+
+function NoticeForm({ notice, onClose, onSaved }: { notice: Notice | null; onClose: () => void; onSaved: () => void }) {
+  const [title, setTitle] = useState(notice?.title || '');
+  const [body, setBody] = useState(notice?.body || '');
+  const [pinned, setPinned] = useState(notice?.pinned ?? false);
+  const [active, setActive] = useState(notice?.is_active ?? true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  async function handleSave() {
+    if (!title.trim() || !body.trim()) {
+      setError('Title and message are required.');
+      return;
+    }
+    setSaving(true);
+    setError('');
+    try {
+      if (notice) {
+        const { error: updateError } = await supabase
+          .from('notices')
+          .update({ title, body, pinned, is_active: active, updated_at: new Date().toISOString() })
+          .eq('id', notice.id);
+        if (updateError) throw updateError;
+      } else {
+        const { error: insertError } = await supabase
+          .from('notices')
+          .insert({ title, body, pinned, is_active: active });
+        if (insertError) throw insertError;
+      }
+      onSaved();
+    } catch (err) {
+      console.error('Notice save failed', err);
+      setError('Could not save the notice. Please try again.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <ModalShell title={notice ? 'Edit Notice' : 'Add Notice'} onClose={onClose}>
+      <div className="space-y-4">
+        <FormInput label="Title" value={title} onChange={setTitle} placeholder="e.g. Exam Schedule Update" />
+        <div>
+          <label className="block text-sm font-medium text-muted mb-2">Message</label>
+          <textarea
+            value={body}
+            onChange={(e) => setBody(e.target.value)}
+            rows={5}
+            className={inputClass}
+            placeholder="Write the notice content here..."
+          />
+        </div>
+        <div className="flex gap-6">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setPinned(!pinned)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${pinned ? 'bg-primary-500' : 'bg-app'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${pinned ? 'translate-x-5' : ''}`} />
+            </button>
+            <span className="text-sm">Pin to top</span>
+          </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <button
+              type="button"
+              onClick={() => setActive(!active)}
+              className={`relative w-11 h-6 rounded-full transition-colors ${active ? 'bg-success-500' : 'bg-app'}`}
+            >
+              <div className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white transition-transform ${active ? 'translate-x-5' : ''}`} />
+            </button>
+            <span className="text-sm">Visible to students</span>
+          </label>
+        </div>
+        {error && (
+          <div className="px-4 py-3 rounded-xl bg-error-50 dark:bg-error-900/20 border border-error-100 dark:border-error-800 text-error-700 dark:text-error-400 text-sm">
+            {error}
+          </div>
+        )}
+        <SubmitButton saving={saving} onClose={onClose} onClick={handleSave} disabled={!title.trim() || !body.trim()} />
+      </div>
+    </ModalShell>
   );
 }
 

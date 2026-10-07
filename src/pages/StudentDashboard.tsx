@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
-import { ChevronRight, Lock, PlayCircle, Calendar, Clock, ArrowLeft, BookOpen, CreditCard } from 'lucide-react';
+import { ChevronRight, Lock, PlayCircle, Calendar, Clock, ArrowLeft, BookOpen, CreditCard, Megaphone, Pin, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/context/AuthContext';
-import type { Grade, Month, Video, StudentAccess, PaymentRequest } from '@/types';
+import type { Grade, Month, Video, StudentAccess, PaymentRequest, Notice } from '@/types';
 import VideoPlayer from '@/components/VideoPlayer';
 import PaymentModal from '@/components/PaymentModal';
 
@@ -21,10 +21,23 @@ export default function StudentDashboard() {
   const [selectedMonth, setSelectedMonth] = useState<Month | null>(null);
   const [selectedVideo, setSelectedVideo] = useState<Video | null>(null);
   const [loading, setLoading] = useState(true);
+  const [notices, setNotices] = useState<Notice[]>([]);
+  const [dismissedNotices, setDismissedNotices] = useState<string[]>([]);
 
   useEffect(() => {
     loadGrades();
+    loadNotices();
   }, []);
+
+  async function loadNotices() {
+    const { data } = await supabase
+      .from('notices')
+      .select('*')
+      .eq('is_active', true)
+      .order('pinned', { ascending: false })
+      .order('created_at', { ascending: false });
+    setNotices((data as Notice[]) || []);
+  }
 
   async function loadGrades() {
     setLoading(true);
@@ -141,6 +154,52 @@ export default function StudentDashboard() {
       {/* Grades */}
       {stage === 'grades' && (
         <div className="animate-fade-in">
+          {/* Notices */}
+          {notices.filter((n) => !dismissedNotices.includes(n.id)).length > 0 && (
+            <div className="mb-8 space-y-3">
+              {notices
+                .filter((n) => !dismissedNotices.includes(n.id))
+                .map((notice) => (
+                  <div
+                    key={notice.id}
+                    className={`relative rounded-2xl p-5 border-2 animate-fade-in ${
+                      notice.pinned
+                        ? 'border-primary-300 dark:border-primary-800 bg-primary-50 dark:bg-primary-900/20'
+                        : 'border-app bg-surface'
+                    }`}
+                  >
+                    <button
+                      onClick={() => setDismissedNotices([...dismissedNotices, notice.id])}
+                      className="absolute top-3 right-3 p-1.5 rounded-lg text-muted hover:text-app hover:bg-app transition-colors"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                    <div className="flex items-start gap-3 pr-8">
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                        notice.pinned ? 'bg-primary-100 dark:bg-primary-900/40 text-primary-600 dark:text-primary-400' : 'bg-app text-muted'
+                      }`}>
+                        {notice.pinned ? <Pin className="w-5 h-5" /> : <Megaphone className="w-5 h-5" />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h3 className="font-bold">{notice.title}</h3>
+                          {notice.pinned && (
+                            <span className="text-xs px-1.5 py-0.5 rounded-full font-medium bg-primary-100 dark:bg-primary-900/40 text-primary-700 dark:text-primary-400">
+                              Pinned
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-muted whitespace-pre-wrap">{notice.body}</p>
+                        <p className="text-xs text-muted mt-2 opacity-70">
+                          {new Date(notice.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          )}
+
           <h1 className="text-3xl font-bold mb-2">Choose Your Grade</h1>
           <p className="text-muted mb-8">Select a grade to browse monthly lessons</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
